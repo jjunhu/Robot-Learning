@@ -26,15 +26,34 @@ def interact(env, learner, expert, observations, actions, checkpoint_path, seed,
             Number of epochs to run the train function for
     """
   # Interact with the environment and aggregate your BC Dataset by querying the expert
-  NUM_INTERACTIONS = 100
+  NUM_INTERACTIONS = 50
+  best_reward = float("-inf")
+  best_state_dict = None
   for episode in range(NUM_INTERACTIONS):
       total_learner_reward = 0
       done = False
       obs = env.reset(seed=seed)
       while not done:
         # TODO: Implement Hopper environment interaction and dataset aggregation here
-
+        with torch.no_grad():
+            learner_action = learner.get_action(obs)
+            expert_action = expert.get_expert_action(obs)
+            observations.append(obs)
+            
+            # aggregate new expert action
+            actions.append(expert_action)
+            obs, reward, done, info = env.step(learner_action)
+            total_learner_reward += reward
         if done:
           break
       print(f"After interaction {episode}, reward = {total_learner_reward}")
-      bc.train(learner, observations, actions, checkpoint_path, num_epochs)
+      if total_learner_reward > best_reward:
+        best_reward = total_learner_reward
+        best_state_dict = learner.state_dict()        
+      bc.train(learner, observations, actions, "dagger_last_epoch", num_epochs)
+          
+  torch.save(best_state_dict, checkpoint_path)
+  learner.load_state_dict(best_state_dict)
+
+  return learner
+      

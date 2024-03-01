@@ -32,20 +32,37 @@ def train(learner, observations, actions, checkpoint_path, num_epochs=100):
 
     loss_fn = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(learner.parameters(), lr=3e-4)
-    dataset = TensorDataset(torch.tensor(observations, dtype = torch.float32), torch.tensor(actions, dtype = torch.float32)) # Create your dataset
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    dataset = TensorDataset(torch.tensor(observations, dtype = torch.float32, device = device), torch.tensor(actions, dtype = torch.float32, device = device)) # Create your dataset
     dataloader = DataLoader(dataset, batch_size=256, shuffle=True) # Create your dataloader
 
     # TODO: Complete the training loop here ###
-    loss = float('inf')
-    for epoch in tqdm(range(num_epochs)):
+    learner.train()
+    for epoch in tqdm(range(num_epochs), desc="Training"):
+        total_loss = 0
+        for batch_index, (batch_observations, batch_actions) in enumerate(dataloader):
+            optimizer.zero_grad()
+            
+            learner_actions = learner(batch_observations)
+            loss = loss_fn(learner_actions, batch_actions)
+            total_loss += loss.item()
+            
+            loss.backward()
+            optimizer.step()
 
-
-          # Saving model state if current loss is less than best loss
-          if loss < best_loss:
-            best_loss = loss
+        avg_loss = total_loss / len(dataloader)  # Calculate average loss per epoch
+        # tqdm.write(f"Epoch {epoch+1}/{num_epochs} - Average Loss: {avg_loss:.4f}")
+            
+        # Saving model state if current loss is less than best loss
+        if avg_loss < best_loss:
+            best_loss = avg_loss
             best_model_state = learner.state_dict()
     
     # Save the best performing checkpoint
     torch.save(best_model_state, checkpoint_path)
+    
+    # Load the best model state
+    learner.load_state_dict(best_model_state)
     
     return learner
